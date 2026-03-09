@@ -20,8 +20,23 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [tableNumber, setTableNumber] = useState<string | null>(null);
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    const saved = localStorage.getItem('restaurant_pos_cart');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [tableNumber, setTableNumber] = useState<string | null>(() => {
+    return localStorage.getItem('restaurant_pos_table') || null;
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('restaurant_pos_cart', JSON.stringify(cart));
+  }, [cart]);
+
+  React.useEffect(() => {
+    if (tableNumber) {
+      localStorage.setItem('restaurant_pos_table', tableNumber);
+    }
+  }, [tableNumber]);
 
   const addToCart = (item: MenuItem) => {
     setCart((prev) => {

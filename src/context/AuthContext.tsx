@@ -1,35 +1,41 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
+export interface AppUser {
+  id: string;
+  phone: string;
+  name?: string;
+  created_at?: string;
+}
+
 interface AuthContextType {
-  user: User | null;
+  user: AppUser | null;
   loading: boolean;
   signIn: (phone: string) => Promise<{ error: any }>;
   verifyOtp: (phone: string, token: string) => Promise<{ error: any }>;
+  updateProfile: (name: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [tempOtp, setTempOtp] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check active sessions and sets the user
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    // Listen for changes on auth state (logged in, signed out, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
+    // Check local storage for existing session
+    const storedUser = localStorage.getItem('restaurant_pos_user');
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.error('Failed to parse stored user', e);
+        localStorage.removeItem('restaurant_pos_user');
+      }
+    }
+    setLoading(false);
   }, []);
 
   const signIn = async (phone: string) => {
@@ -38,35 +44,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
       setTempOtp(generatedOtp);
 
-      // Call Fast2SMS API
-      const apiKey = import.meta.env.VITE_FAST2SMS_API_KEY;
-      if (!apiKey) {
-        console.warn('Fast2SMS API key is missing. Check your environment variables.');
-        // For development/testing without API key, just log the OTP
-        console.log(`[DEV MODE] OTP for ${phone} is: ${generatedOtp}`);
-        return { error: null };
-      }
-
-      const response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+      // Call our backend API to send the OTP
+      const response = await fetch('/api/send-otp', {
         method: 'POST',
         headers: {
-          'authorization': apiKey,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          route: 'v3',
-          sender_id: 'TXTIND',
-          message: `Your Restaurant POS verification code is ${generatedOtp}`,
-          language: 'english',
-          flash: 0,
-          numbers: phone,
+          phone,
+          otp: generatedOtp
         })
       });
 
       const data = await response.json();
       
-      if (!response.ok || !data.return) {
-        throw new Error(data.message || 'Failed to send OTP via Fast2SMS');
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send OTP');
+      }
+
+      // Log for dev purposes if the API key is missing
+      if (data.message && data.message.includes('DEV MODE')) {
+        console.log(`[DEV MODE] OTP for ${phone} is: ${generatedOtp}`);
+        alert(`[DEV MODE] Fast2SMS Error: ${data.warning || 'API Failed'}\n\nYour OTP is: ${generatedOtp}`);
       }
 
       return { error: null };
@@ -83,31 +82,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Invalid OTP');
       }
 
-      // If OTP is valid, we need to create or sign in the user in Supabase
-      // Since we bypassed Supabase's built-in OTP, we'll use a custom approach
-      // For this demo, we'll create a dummy email based on the phone number
-      // and use a fixed password to simulate a successful login
-      const dummyEmail = `${phone}@restaurantpos.local`;
-      const dummyPassword = `User@${phone}`; // A consistent password for this user
+      // Check if user exists in the custom users table
+      let { data: existingUser, error: fetchError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('phone', phone)
+        .single();
 
-      // Try to sign in first
-      let { data, error } = await supabase.auth.signInWithPassword({
-        email: dummyEmail,
-        password: dummyPassword,
-      });
-
-      // If sign in fails (user doesn't exist), try to sign up
-      if (error && error.message.includes('Invalid login credentials')) {
-        const signUpResult = await supabase.auth.signUp({
-          email: dummyEmail,
-          password: dummyPassword,
-        });
-        
-        data = signUpResult.data;
-        error = signUpResult.error;
+      if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is "not found"
+        throw fetchError;
       }
 
-      if (error) throw error;
+      let appUser: AppUser;
+
+      if (!existingUser) {
+        // Create new user
+        const { data: newUser, error: insertError } = await supabase
+          .from('users')
+          .insert([{ phone }])
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+        appUser = newUser;
+      } else {
+        appUser = existingUser;
+      }
+
+      // Set user in state and local storage
+      setUser(appUser);
+      localStorage.setItem('restaurant_pos_user', JSON.stringify(appUser));
 
       // Clear the temporary OTP
       setTempOtp(null);
@@ -119,12 +123,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateProfile = async (name: string) => {
+    if (!user) return { error: new Error('Not logged in') };
+    
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .update({ name })
+        .eq('id', user.id)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      const updatedUser = { ...user, name: data.name };
+      setUser(updatedUser);
+      localStorage.setItem('restaurant_pos_user', JSON.stringify(updatedUser));
+      
+      return { error: null };
+    } catch (error: any) {
+      console.error('Error updating profile:', error);
+      return { error };
+    }
+  };
+
   const signOut = async () => {
-    await supabase.auth.signOut();
+    setUser(null);
+    localStorage.removeItem('restaurant_pos_user');
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, verifyOtp, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signIn, verifyOtp, updateProfile, signOut }}>
       {children}
     </AuthContext.Provider>
   );

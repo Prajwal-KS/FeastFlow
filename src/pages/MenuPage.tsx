@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { menuItems, categories, MenuItem } from '../data/menu';
+import { menuItems as localMenuItems, categories as localCategories, MenuItem } from '../data/menu';
 import { Menu, Search, ShoppingBasket, Plus, Minus, ArrowRight, X, User, ClipboardList, LogOut } from 'lucide-react';
 import { clsx } from 'clsx';
+import { supabase } from '../lib/supabase';
 
 export default function MenuPage() {
   const [activeCategory, setActiveCategory] = useState('All Items');
@@ -12,9 +13,53 @@ export default function MenuPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(localMenuItems);
+  const [categories, setCategories] = useState<string[]>(localCategories);
+  const [isLoadingMenu, setIsLoadingMenu] = useState(true);
+
   const { cart, addToCart, updateQuantity, cartTotal, cartCount, tableNumber } = useCart();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    async function fetchMenu() {
+      try {
+        const { data, error } = await supabase
+          .from('menu_items')
+          .select('*')
+          .eq('is_available', true);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          // Map database snake_case to frontend camelCase
+          const formattedItems: MenuItem[] = data.map(item => ({
+            id: item.id,
+            name: item.name,
+            description: item.description,
+            price: Number(item.price),
+            category: item.category,
+            imageUrl: item.image_url,
+            badge: item.badge,
+            options: item.options,
+          }));
+          
+          setMenuItems(formattedItems);
+          
+          // Extract unique categories
+          const uniqueCategories = Array.from(new Set(formattedItems.map(item => item.category)));
+          setCategories(['All Items', ...uniqueCategories]);
+        }
+      } catch (error) {
+        console.warn('Could not fetch menu from Supabase, falling back to local data. Ensure you have created the menu_items table.', error);
+        // Fallback is already set in initial state
+      } finally {
+        setIsLoadingMenu(false);
+      }
+    }
+
+    fetchMenu();
+  }, []);
 
   const filteredItems = menuItems.filter((item) => {
     const matchesCategory = activeCategory === 'All Items' || item.category === activeCategory;
@@ -27,8 +72,55 @@ export default function MenuPage() {
     return cart.find((i) => i.id === itemId)?.quantity || 0;
   };
 
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [tempName, setTempName] = useState('');
+  const { updateProfile } = useAuth();
+
+  useEffect(() => {
+    if (user && !user.name) {
+      setShowNamePrompt(true);
+    }
+  }, [user]);
+
+  const handleSaveName = async () => {
+    if (tempName.trim()) {
+      await updateProfile(tempName.trim());
+      setShowNamePrompt(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background-light font-display text-slate-900 pb-24">
+      {/* Name Prompt Modal */}
+      {showNamePrompt && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <User className="w-8 h-8 text-primary" />
+            </div>
+            <h3 className="text-xl font-bold text-center mb-2 text-slate-900">Welcome!</h3>
+            <p className="text-slate-500 text-center mb-6 text-sm">Please tell us your name to personalize your experience.</p>
+            
+            <input 
+              type="text"
+              value={tempName}
+              onChange={(e) => setTempName(e.target.value)}
+              placeholder="Enter your full name"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-primary/50"
+              autoFocus
+            />
+            
+            <button 
+              onClick={handleSaveName}
+              disabled={!tempName.trim()}
+              className="w-full bg-primary text-white py-3 rounded-xl font-bold disabled:opacity-50 transition-opacity"
+            >
+              Save & Continue
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background-light/95 backdrop-blur-md border-b border-primary/20">
         <div className="px-4 py-3 flex items-center justify-between">
@@ -40,9 +132,10 @@ export default function MenuPage() {
               <Menu className="w-6 h-6" />
             </button>
             <div>
-              <h1 className="font-bold text-lg leading-tight uppercase tracking-wider">Restaurant POS</h1>
+              <h1 className="font-bold text-lg leading-tight uppercase tracking-wider">
+                {user?.name ? `Hello, ${user.name.split(' ')[0]}` : 'Restaurant POS'}
+              </h1>
               <div className="flex items-center gap-1 text-xs text-slate-500">
-                <span className="material-icons text-[14px]">table_restaurant</span>
                 <span>Table #{tableNumber || '??'}</span>
               </div>
             </div>
@@ -109,17 +202,29 @@ export default function MenuPage() {
                   <User className="w-6 h-6 text-primary" />
                 </div>
                 <div>
-                  <p className="font-bold text-slate-900">Logged In</p>
-                  <p className="text-sm text-slate-500">{user.email?.replace('@restaurantpos.local', '') || 'User'}</p>
+                  <p className="font-bold text-slate-900">{user.name || 'Logged In'}</p>
+                  <p className="text-sm text-slate-500">{user.phone || 'User'}</p>
                 </div>
               </div>
               
               <nav className="space-y-2">
-                <button className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-white border border-transparent hover:border-primary/10 text-slate-700 font-medium transition-all">
+                <button 
+                  onClick={() => {
+                    setIsDrawerOpen(false);
+                    navigate('/orders');
+                  }}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-white border border-transparent hover:border-primary/10 text-slate-700 font-medium transition-all"
+                >
                   <ClipboardList className="w-5 h-5 text-primary" />
                   My Orders
                 </button>
-                <button className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-white border border-transparent hover:border-primary/10 text-slate-700 font-medium transition-all">
+                <button 
+                  onClick={() => {
+                    setIsDrawerOpen(false);
+                    navigate('/profile');
+                  }}
+                  className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-white border border-transparent hover:border-primary/10 text-slate-700 font-medium transition-all"
+                >
                   <User className="w-5 h-5 text-primary" />
                   Profile
                 </button>

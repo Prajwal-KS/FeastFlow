@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { ArrowLeft, CheckCircle2, Circle, CreditCard, Banknote, Receipt } from 'lucide-react';
 import { clsx } from 'clsx';
+import { load } from '@cashfreepayments/cashfree-js';
+import { supabase } from '../lib/supabase';
 
 export default function CheckoutPage() {
   const { cart, cartTotal, tableNumber, clearCart } = useCart();
@@ -12,22 +14,183 @@ export default function CheckoutPage() {
   const location = useLocation();
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'cash'>('upi');
   const [isPlaced, setIsPlaced] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const taxes = Math.round(cartTotal * 0.05); // 5% tax
-  const toPay = cartTotal + taxes;
+  // Tax is already included in the price
+  const toPay = cartTotal;
 
-  const handlePlaceOrder = () => {
+  useEffect(() => {
+    // Check if returning from Cashfree payment redirect
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderId = urlParams.get('order_id');
+    
+    if (orderId) {
+      // If we have an order_id in the URL, it means we returned from a payment gateway
+      // In a real app, you would verify the payment status with your backend here
+      // For this demo, we'll assume it was successful if they returned
+      setIsPlaced(true);
+      setTimeout(() => {
+        clearCart();
+        navigate('/orders');
+      }, 3000);
+    }
+  }, [navigate, clearCart]);
+
+  const generateOrderNumber = async () => {
+    try {
+      // Get current date in IST
+      const now = new Date();
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      const istDate = new Date(now.getTime() + istOffset);
+      
+      const startOfDayIST = new Date(istDate);
+      startOfDayIST.setUTCHours(0, 0, 0, 0);
+      const startOfDayUTC = new Date(startOfDayIST.getTime() - istOffset);
+
+      const endOfDayIST = new Date(istDate);
+      endOfDayIST.setUTCHours(23, 59, 59, 999);
+      const endOfDayUTC = new Date(endOfDayIST.getTime() - istOffset);
+
+      const { count, error } = await supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', startOfDayUTC.toISOString())
+        .lte('created_at', endOfDayUTC.toISOString());
+
+      if (error) throw error;
+
+      const orderNumberCount = (count || 0) + 1;
+      return `#${orderNumberCount.toString().padStart(4, '0')}`;
+    } catch (error) {
+      console.error('Error generating order number:', error);
+      return `#${Math.floor(Math.random() * 9000 + 1000)}`; // Fallback
+    }
+  };
+
+  const saveOrderToDatabase = async (paymentStatus: string) => {
+    try {
+      const orderNumber = await generateOrderNumber();
+
+      // 1. Create the order
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .insert([{
+          user_id: user?.id,
+          table_number: tableNumber,
+          order_number: orderNumber,
+          total_amount: toPay,
+          status: 'pending',
+          payment_method: paymentMethod,
+          payment_status: paymentStatus
+        }])
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      // 2. Create order items
+      const orderItems = cart.map(item => ({
+        order_id: order.id,
+        menu_item_id: item.id,
+        quantity: item.quantity,
+        price_at_time: item.price
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+
+      if (itemsError) throw itemsError;
+
+      return order.id;
+    } catch (error) {
+      console.error('Failed to save order to database:', error);
+      // We don't throw here to not block the user if the DB isn't set up yet
+      return null;
+    }
+  };
+
+  const handlePlaceOrder = async () => {
     if (!user) {
       navigate('/login', { state: { from: location } });
       return;
     }
     
-    // Here you would integrate Cashfree UPI or handle cash order
-    setIsPlaced(true);
-    setTimeout(() => {
-      clearCart();
-      navigate('/menu');
-    }, 3000);
+    if (paymentMethod === 'cash') {
+      setIsProcessing(true);
+      await saveOrderToDatabase('pending');
+      setIsProcessing(false);
+      
+      setIsPlaced(true);
+      setTimeout(() => {
+        clearCart();
+        navigate('/orders');
+      }, 3000);
+      return;
+    }
+
+    try {
+      setIsProcessing(true);
+      
+      // 1. Create order on our backend
+      const response = await fetch('/api/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderAmount: toPay,
+          customerId: user.id,
+          customerPhone: user.phone || '9999999999',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to initialize payment');
+      }
+
+      // 2. Initialize Cashfree SDK
+      const cashfree = await load({
+        mode: 'sandbox', // Change to 'production' for live environment
+      });
+
+      // 3. Open checkout modal
+      const checkoutOptions = {
+        paymentSessionId: data.payment_session_id,
+        redirectTarget: '_modal',
+      };
+
+      cashfree.checkout(checkoutOptions).then(async (result: any) => {
+        if(result.error){
+          console.error("Payment error or popup closed:", result.error);
+          alert(result.error.message || 'Payment failed or cancelled');
+          await saveOrderToDatabase('failed');
+        }
+        if(result.redirect){
+          console.log("Payment will be redirected");
+          // The page will redirect, so we don't need to do anything here
+          // The useEffect will catch the return URL
+          await saveOrderToDatabase('pending');
+        }
+        if(result.paymentDetails){
+          console.log("Payment completed:", result.paymentDetails.paymentMessage);
+          
+          await saveOrderToDatabase('paid');
+          
+          setIsPlaced(true);
+          setTimeout(() => {
+            clearCart();
+            navigate('/orders');
+          }, 3000);
+        }
+      });
+
+    } catch (error: any) {
+      console.error('Payment error:', error);
+      alert(error.message || 'Something went wrong while processing payment');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   if (isPlaced) {
@@ -38,7 +201,7 @@ export default function CheckoutPage() {
         <p className="text-slate-500 mb-8">
           Your food is being prepared. It will be served at Table {tableNumber}.
         </p>
-        <p className="text-sm text-primary font-medium animate-pulse">Redirecting to menu...</p>
+        <p className="text-sm text-primary font-medium animate-pulse">Redirecting to your orders...</p>
       </div>
     );
   }
@@ -106,8 +269,8 @@ export default function CheckoutPage() {
               <span className="font-medium">₹{cartTotal}</span>
             </div>
             <div className="flex justify-between text-slate-600">
-              <span>Taxes (5% GST)</span>
-              <span className="font-medium">₹{taxes.toFixed(2)}</span>
+              <span>Taxes (5% GST included)</span>
+              <span className="font-medium text-green-600">Included</span>
             </div>
             <div className="flex justify-between text-lg font-bold text-slate-900 pt-2 border-t border-slate-100 mt-2">
               <span>Total</span>
@@ -182,9 +345,14 @@ export default function CheckoutPage() {
           </div>
           <button 
             onClick={handlePlaceOrder}
-            className="bg-primary hover:bg-primary/90 text-white px-8 py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-primary/20 transition-all flex-[2] text-center"
+            disabled={isProcessing}
+            className="bg-primary hover:bg-primary/90 text-white px-8 py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-primary/20 transition-all flex-[2] text-center disabled:opacity-70 flex justify-center items-center"
           >
-            Place Order
+            {isProcessing ? (
+              <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              'Place Order'
+            )}
           </button>
         </div>
       </div>
