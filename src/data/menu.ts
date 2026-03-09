@@ -15,7 +15,7 @@ export const menuItems: MenuItem[] = [
     name: 'Truffle Parmesan Fries',
     description: 'Crispy skin-on fries tossed in truffle oil, topped with aged parmesan and fresh parsley.',
     price: 450,
-    category: 'Starters & Small Plates',
+    category: 'Starter',
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCYx6OuMaKaxQa2PAcK0_1Q7nKYD2AD_ntG_p6FmxAWCM99Zt-Z4O5jeRIn7icylxOIMXgVwDmiCW4AUBBBiTfpUbktJiV1CiptMQ4o4pbKtvMFCgk_V6frzHS3IWtO_UHbaC3sVkdlhJK7dteB5BQad3iqS2WYXQYLDeuTU26QmLQ2CSnvi76yNv4tAHP3Kp_2dBZIpL2BsXo4CwGM_u1isIxooWtZIfPpItLL29lX8F6pqJq6M6rhnW4JEGs95GTrqNktFamuGrs_',
   },
   {
@@ -23,7 +23,7 @@ export const menuItems: MenuItem[] = [
     name: 'Wagyu Slider',
     description: 'Premium Wagyu beef, caramelized onions, Gruyère cheese, and our signature saffron aioli.',
     price: 890,
-    category: 'Starters & Small Plates',
+    category: 'Starter',
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCY3IGzVh5pizxyEEFaS0Z3FiOXV9zva2_khkGuBe-csl-XcUgEiOWzrckWEOnUE8m3yVv-Ywrh5FKD6TJaGpdRpv4AwLf-AqDFv4ZAJVf0BsUk0dGe8G5kMWUaWqyt1rKL2MwncRlJA878Xruc9hU-sFwAE2gj_Q3cF2mENU8T8ewmHlT9OvJEE3SFlKFJbaVU1VgefE_zAIw6CwLAwmHH4SK483oAn_4V-UjkLyEaUqoSXhyJaeRxlOGAiXw5ElMmwS-ao0b_0n3l',
   },
   {
@@ -31,7 +31,7 @@ export const menuItems: MenuItem[] = [
     name: 'Classic Chicken Tikka',
     description: 'Clay oven roasted chicken marinated in yogurt and a blend of Kashmiri spices.',
     price: 620,
-    category: 'Starters & Small Plates',
+    category: 'Starter',
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCKZsQfYGC5ftJowaftykX5x8fADekeucnG-d5aWb1ZxVKCzSyyimzsGjwjcnpNH1wbG5OCH5QW5hr-T3EnOq2b98eJTCmDtSUAzcpTTS69NER33TaVSeQNqDXYLpJpgXtbhM0s1PGf2-3ZnsScB8mSWp-KRdGjx9evdYIE57pCH5leBDPyAlFcJcOGOkywpEQrwuUtA-Nd3otRACsPL0yT31T-QYhB4qnwDHrU7WCv8rYOqDcY5b2keU_tFSJ7-6vYwp3yLR130blG',
   },
   {
@@ -68,4 +68,4 @@ export const menuItems: MenuItem[] = [
   }
 ];
 
-export const categories = ['All Items', 'Starters & Small Plates', 'Signature Mains', 'Breads', 'Beverages'];
+export const categories = ['All Items', 'Starter', 'Signature Mains', 'Breads', 'Beverages'];

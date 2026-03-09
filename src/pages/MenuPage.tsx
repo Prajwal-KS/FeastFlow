@@ -26,7 +26,7 @@ export default function MenuPage() {
       try {
         const { data, error } = await supabase
           .from('menu_items')
-          .select('*')
+          .select('*, categories(name)')
           .eq('is_available', true);
 
         if (error) throw error;
@@ -38,7 +38,7 @@ export default function MenuPage() {
             name: item.name,
             description: item.description,
             price: Number(item.price),
-            category: item.category,
+            category: item.categories?.name || 'Uncategorized',
             imageUrl: item.image_url,
             badge: item.badge,
             options: item.options,

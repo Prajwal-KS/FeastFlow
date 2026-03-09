@@ -12,6 +12,9 @@ export default function LandingPage() {
     const table = searchParams.get('table');
     if (table) {
       setTableNumber(table);
+    } else {
+      // If there is no table parameter in the URL, clear the stored table number
+      setTableNumber(null);
     }
   }, [searchParams, setTableNumber]);
 
