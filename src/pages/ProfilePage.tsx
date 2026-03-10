@@ -5,13 +5,26 @@ import { ArrowLeft, User, Phone, LogOut, CheckCircle2, Menu as MenuIcon, Receipt
 import { clsx } from 'clsx';
 
 export default function ProfilePage() {
-  const { user, updateProfile, signOut } = useAuth();
+  const { user, loading, updateProfile, signOut } = useAuth();
   const navigate = useNavigate();
   
   const [name, setName] = useState(user?.name || '');
   const [isEditing, setIsEditing] = useState(!user?.name);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  React.useEffect(() => {
+    if (!loading && !user) {
+      navigate('/login');
+    }
+  }, [user, loading, navigate]);
+
+  React.useEffect(() => {
+    if (user?.name && !name) {
+      setName(user.name);
+      setIsEditing(false);
+    }
+  }, [user]);
 
   const handleSave = async () => {
     if (!name.trim()) return;
@@ -34,9 +47,8 @@ export default function ProfilePage() {
     navigate('/login');
   };
 
-  if (!user) {
-    navigate('/login');
-    return null;
+  if (loading || !user) {
+    return <div className="min-h-screen flex items-center justify-center bg-background-light"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div>;
   }
 
   return (

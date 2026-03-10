@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabase';
 
 export default function CheckoutPage() {
   const { cart, cartTotal, tableNumber, clearCart } = useCart();
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'cash'>('upi');
@@ -24,17 +24,38 @@ export default function CheckoutPage() {
     const urlParams = new URLSearchParams(window.location.search);
     const orderId = urlParams.get('order_id');
     
-    if (orderId) {
+    if (orderId && !isPlaced && !loading) {
       // If we have an order_id in the URL, it means we returned from a payment gateway
       // In a real app, you would verify the payment status with your backend here
       // For this demo, we'll assume it was successful if they returned
-      setIsPlaced(true);
-      setTimeout(() => {
-        clearCart();
-        navigate('/orders');
-      }, 3000);
+      
+      const completeRedirectOrder = async () => {
+        setIsProcessing(true);
+        const pendingOrderId = localStorage.getItem('restaurant_pos_pending_order');
+        
+        if (pendingOrderId) {
+          // Update existing pending order
+          await supabase
+            .from('orders')
+            .update({ payment_status: 'paid', status: 'preparing' })
+            .eq('id', pendingOrderId);
+          localStorage.removeItem('restaurant_pos_pending_order');
+        } else {
+          // Fallback: create new order if pending order ID was lost
+          await saveOrderToDatabase('paid');
+        }
+        
+        setIsProcessing(false);
+        setIsPlaced(true);
+        setTimeout(() => {
+          clearCart();
+          navigate('/orders');
+        }, 3000);
+      };
+      
+      completeRedirectOrder();
     }
-  }, [navigate, clearCart]);
+  }, [navigate, clearCart, isPlaced, loading]);
 
   const generateOrderNumber = async () => {
     try {
@@ -79,7 +100,7 @@ export default function CheckoutPage() {
           table_number: tableNumber,
           order_number: orderNumber,
           total_amount: toPay,
-          status: 'pending',
+          status: paymentStatus === 'paid' ? 'preparing' : 'pending',
           payment_method: paymentMethod,
           payment_status: paymentStatus
         }])
@@ -167,17 +188,20 @@ export default function CheckoutPage() {
         redirectTarget: '_modal',
       };
 
-      cashfree.checkout(checkoutOptions).then(async (result: any) => {
+      await cashfree.checkout(checkoutOptions).then(async (result: any) => {
         if(result.error){
           console.error("Payment error or popup closed:", result.error);
           alert(result.error.message || 'Payment failed or cancelled');
-          await saveOrderToDatabase('failed');
+          // Do not create order on failure
         }
         if(result.redirect){
           console.log("Payment will be redirected");
           // The page will redirect, so we don't need to do anything here
           // The useEffect will catch the return URL
-          await saveOrderToDatabase('pending');
+          const orderId = await saveOrderToDatabase('pending');
+          if (orderId) {
+            localStorage.setItem('restaurant_pos_pending_order', orderId);
+          }
         }
         if(result.paymentDetails){
           console.log("Payment completed:", result.paymentDetails.paymentMessage);

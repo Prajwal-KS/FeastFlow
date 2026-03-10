@@ -13,8 +13,8 @@ export default function LandingPage() {
     if (table) {
       setTableNumber(table);
     } else {
-      // If there is no table parameter in the URL, clear the stored table number
       setTableNumber(null);
+      localStorage.removeItem('restaurant_pos_table');
     }
   }, [searchParams, setTableNumber]);
 

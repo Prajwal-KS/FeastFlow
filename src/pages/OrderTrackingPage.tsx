@@ -28,12 +28,14 @@ interface Order {
 
 export default function OrderTrackingPage() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (loading) return;
+    
     if (!user) {
       navigate('/login');
       return;
