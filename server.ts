@@ -68,30 +68,44 @@ async function startServer() {
   app.post('/api/send-otp', async (req, res) => {
     try {
       const { phone, otp } = req.body;
-      const apiKey = process.env.VITE_FAST2SMS_API_KEY;
+      const apiKey = process.env.VITE_FAST2SMS_API_KEY || process.env.FAST2SMS_API_KEY;
 
       if (!apiKey) {
         console.warn('Fast2SMS API key is missing. Check your environment variables.');
         return res.json({ success: true, message: 'DEV MODE: OTP logged to console' });
       }
 
+      // Fast2SMS expects a 10-digit number without country code
+      const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+
       const response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
         method: 'POST',
         headers: {
           'authorization': apiKey,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         },
         body: JSON.stringify({
-          route: 'v3',
-          sender_id: 'TXTIND',
-          message: `Your Restaurant POS verification code is ${otp}`,
-          language: 'english',
-          flash: 0,
-          numbers: phone,
+          route: 'otp',
+          variables_values: otp,
+          numbers: cleanPhone,
         })
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.warn('Fast2SMS API returned non-JSON response:', responseText);
+        console.warn('Fast2SMS API failed. Falling back to DEV MODE.');
+        return res.json({ 
+          success: true, 
+          message: 'DEV MODE: OTP logged to console', 
+          warning: 'Failed to parse Fast2SMS response' 
+        });
+      }
       
       if (!response.ok || !data.return) {
         console.warn('Fast2SMS API returned an error:', data.message || data);

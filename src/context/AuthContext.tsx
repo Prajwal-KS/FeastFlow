@@ -56,7 +56,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error('Non-JSON response from /api/send-otp:', responseText);
+        throw new Error('Server returned an invalid response. If you are on Vercel, the backend API is not supported.');
+      }
       
       if (!response.ok) {
         throw new Error(data.error || 'Failed to send OTP');
