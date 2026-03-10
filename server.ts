@@ -68,7 +68,7 @@ async function startServer() {
   app.post('/api/send-otp', async (req, res) => {
     try {
       const { phone, otp } = req.body;
-      const apiKey = process.env.VITE_FAST2SMS_API_KEY || process.env.FAST2SMS_API_KEY;
+      const apiKey = process.env.FAST2SMS_API_KEY;
 
       if (!apiKey) {
         console.warn('Fast2SMS API key is missing. Check your environment variables.');
