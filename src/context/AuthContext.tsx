@@ -22,7 +22,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tempOtp, setTempOtp] = useState<string | null>(null);
 
   useEffect(() => {
     // Check local storage for existing session
@@ -40,20 +39,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (phone: string) => {
     try {
-      // Generate a random 6-digit OTP
-      const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      setTempOtp(generatedOtp);
-
       // Call our backend API to send the OTP
       const response = await fetch('/api/send-otp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          phone,
-          otp: generatedOtp
-        })
+        body: JSON.stringify({ phone })
       });
 
       const responseText = await response.text();
@@ -71,8 +63,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Log for dev purposes if the API key is missing
       if (data.message && data.message.includes('DEV MODE')) {
-        console.log(`[DEV MODE] OTP for ${phone} is: ${generatedOtp}`);
-        alert(`[DEV MODE] Fast2SMS Error: ${data.warning || 'API Failed'}\n\nYour OTP is: ${generatedOtp}`);
+        console.log(`[DEV MODE] OTP sent. Check backend console.`);
+        // We no longer alert the OTP to the user, it is only visible in the backend console
       }
 
       return { error: null };
@@ -84,9 +76,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const verifyOtp = async (phone: string, token: string) => {
     try {
-      // Verify against the temporarily stored OTP
-      if (token !== tempOtp) {
-        throw new Error('Invalid OTP');
+      // Verify against the backend
+      const response = await fetch('/api/verify-otp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ phone, otp: token })
+      });
+
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error('Non-JSON response from /api/verify-otp:', responseText);
+        throw new Error('Server returned an invalid response.');
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Invalid OTP');
       }
 
       // Check if user exists in the custom users table
@@ -119,9 +128,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Set user in state and local storage
       setUser(appUser);
       localStorage.setItem('restaurant_pos_user', JSON.stringify(appUser));
-
-      // Clear the temporary OTP
-      setTempOtp(null);
       
       return { error: null };
     } catch (error: any) {

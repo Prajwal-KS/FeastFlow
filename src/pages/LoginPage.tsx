@@ -9,12 +9,29 @@ export default function LoginPage() {
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [resendTimer, setResendTimer] = useState(0);
   
-  const { signIn, verifyOtp } = useAuth();
+  const { user, signIn, verifyOtp, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const from = location.state?.from?.pathname || '/menu';
+
+  React.useEffect(() => {
+    if (!authLoading && user) {
+      navigate(from, { replace: true });
+    }
+  }, [user, authLoading, navigate, from]);
+
+  React.useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [resendTimer]);
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,8 +47,27 @@ export default function LoginPage() {
       const { error } = await signIn(phone);
       if (error) throw error;
       setStep('otp');
+      setResendTimer(180); // Start 3 minute timer
     } catch (err: any) {
       setError(err.message || 'Failed to send OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendTimer > 0) return;
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      const { error } = await signIn(phone);
+      if (error) throw error;
+      setResendTimer(180); // Restart 3 minute timer
+      setOtp(''); // Clear previous OTP
+    } catch (err: any) {
+      setError(err.message || 'Failed to resend OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -156,9 +192,26 @@ export default function LoginPage() {
               >
                 <span className="truncate">{loading ? 'Verifying...' : 'Verify & Continue'}</span>
               </button>
+              
               <button 
                 type="button"
-                onClick={() => setStep('phone')}
+                onClick={handleResendOtp}
+                disabled={resendTimer > 0 || loading}
+                className="flex min-w-[84px] w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl h-14 px-5 bg-transparent text-slate-700 text-base font-semibold leading-normal tracking-[0.015em] hover:bg-slate-100 transition-colors disabled:opacity-50"
+              >
+                <span className="truncate">
+                  {resendTimer > 0 
+                    ? `Resend OTP in ${Math.floor(resendTimer / 60)}:${(resendTimer % 60).toString().padStart(2, '0')}` 
+                    : 'Resend OTP'}
+                </span>
+              </button>
+
+              <button 
+                type="button"
+                onClick={() => {
+                  setStep('phone');
+                  setResendTimer(0);
+                }}
                 className="flex min-w-[84px] w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl h-14 px-5 bg-transparent text-slate-500 text-base font-semibold leading-normal tracking-[0.015em] hover:bg-slate-100 transition-colors"
               >
                 <span className="truncate">Change Phone Number</span>
