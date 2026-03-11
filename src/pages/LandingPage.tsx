@@ -1,12 +1,14 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { useSettings } from '../context/SettingsContext';
 import { Utensils, ArrowRight, QrCode, CreditCard, Leaf, MapPin } from 'lucide-react';
 
 export default function LandingPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { setTableNumber, tableNumber } = useCart();
+  const { isTableServiceEnabled } = useSettings();
 
   useEffect(() => {
     const table = searchParams.get('table');
@@ -39,12 +41,14 @@ export default function LandingPage() {
           <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">
             Restaurant POS
           </h1>
-          <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-slate-900/5 border border-slate-200">
-            <MapPin className="text-primary w-4 h-4 mr-2" />
-            <span className="text-sm font-semibold uppercase tracking-widest text-slate-600">
-              Table {tableNumber || '??'}
-            </span>
-          </div>
+          {isTableServiceEnabled && (
+            <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-slate-900/5 border border-slate-200">
+              <MapPin className="text-primary w-4 h-4 mr-2" />
+              <span className="text-sm font-semibold uppercase tracking-widest text-slate-600">
+                Table {tableNumber || '??'}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Center Message */}

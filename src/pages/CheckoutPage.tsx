@@ -7,14 +7,19 @@ import { clsx } from 'clsx';
 import { load } from '@cashfreepayments/cashfree-js';
 import { supabase } from '../lib/supabase';
 
+import { useSettings } from '../context/SettingsContext';
+
 export default function CheckoutPage() {
   const { cart, cartTotal, tableNumber, clearCart } = useCart();
   const { user, loading } = useAuth();
+  const { isTableServiceEnabled } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'cash'>('upi');
   const [isPlaced, setIsPlaced] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const [tempOrderNumber, setTempOrderNumber] = useState<string | null>(null);
 
   // Tax is already included in the price
   const toPay = cartTotal;
@@ -34,10 +39,17 @@ export default function CheckoutPage() {
         const pendingOrderId = localStorage.getItem('restaurant_pos_pending_order');
         
         if (pendingOrderId) {
+          // Generate order number now that payment is successful
+          const orderNumber = await generateOrderNumber();
+          
           // Update existing pending order
           await supabase
             .from('orders')
-            .update({ payment_status: 'paid', status: 'preparing' })
+            .update({ 
+              payment_status: 'paid', 
+              status: 'preparing',
+              order_number: orderNumber
+            })
             .eq('id', pendingOrderId);
           localStorage.removeItem('restaurant_pos_pending_order');
         } else {
@@ -88,9 +100,13 @@ export default function CheckoutPage() {
     }
   };
 
+  const generateTempOrderNumber = () => {
+    return `T-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  };
+
   const saveOrderToDatabase = async (paymentStatus: string) => {
     try {
-      const orderNumber = await generateOrderNumber();
+      const orderNumber = paymentStatus === 'paid' ? await generateOrderNumber() : generateTempOrderNumber();
 
       // 1. Create the order
       const { data: order, error: orderError } = await supabase
@@ -123,7 +139,7 @@ export default function CheckoutPage() {
 
       if (itemsError) throw itemsError;
 
-      return order.id;
+      return { id: order.id, orderNumber: order.order_number };
     } catch (error) {
       console.error('Failed to save order to database:', error);
       // We don't throw here to not block the user if the DB isn't set up yet
@@ -139,14 +155,17 @@ export default function CheckoutPage() {
     
     if (paymentMethod === 'cash') {
       setIsProcessing(true);
-      await saveOrderToDatabase('pending');
+      const result = await saveOrderToDatabase('pending');
+      if (result) {
+        setTempOrderNumber(result.orderNumber);
+      }
       setIsProcessing(false);
       
       setIsPlaced(true);
       setTimeout(() => {
         clearCart();
         navigate('/orders');
-      }, 3000);
+      }, 5000); // Increased timeout to let them read the temp order number
       return;
     }
 
@@ -198,9 +217,9 @@ export default function CheckoutPage() {
           console.log("Payment will be redirected");
           // The page will redirect, so we don't need to do anything here
           // The useEffect will catch the return URL
-          const orderId = await saveOrderToDatabase('pending');
-          if (orderId) {
-            localStorage.setItem('restaurant_pos_pending_order', orderId);
+          const orderResult = await saveOrderToDatabase('pending');
+          if (orderResult) {
+            localStorage.setItem('restaurant_pos_pending_order', orderResult.id);
           }
         }
         if(result.paymentDetails){
@@ -230,7 +249,9 @@ export default function CheckoutPage() {
         <CheckCircle2 className="w-24 h-24 text-primary mb-6 animate-bounce" />
         <h1 className="text-3xl font-bold text-slate-900 mb-2">Order Placed!</h1>
         <p className="text-slate-500 mb-8">
-          Your food is being prepared. It will be served at Table {tableNumber}.
+          {paymentMethod === 'cash' 
+            ? `Please pay cash at the counter and show ${tempOrderNumber} to confirm your order${isTableServiceEnabled ? ` for Table ${tableNumber}` : ''}.`
+            : `Your food is being prepared.${isTableServiceEnabled ? ` It will be served at Table ${tableNumber}.` : ' Please collect it from the counter when ready.'}`}
         </p>
         <p className="text-sm text-primary font-medium animate-pulse">Redirecting to your orders...</p>
       </div>

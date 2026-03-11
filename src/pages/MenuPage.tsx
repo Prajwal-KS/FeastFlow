@@ -7,6 +7,8 @@ import { Menu, Search, ShoppingBasket, Plus, Minus, ArrowRight, X, User, Clipboa
 import { clsx } from 'clsx';
 import { supabase } from '../lib/supabase';
 
+import { useSettings } from '../context/SettingsContext';
+
 export default function MenuPage() {
   const [activeCategory, setActiveCategory] = useState('All Items');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -19,6 +21,7 @@ export default function MenuPage() {
 
   const { cart, addToCart, updateQuantity, cartTotal, cartCount, tableNumber } = useCart();
   const { user, signOut } = useAuth();
+  const { isTableServiceEnabled } = useSettings();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -135,9 +138,11 @@ export default function MenuPage() {
               <h1 className="font-bold text-lg leading-tight uppercase tracking-wider">
                 {user?.name ? `Hello, ${user.name.split(' ')[0]}` : 'Restaurant POS'}
               </h1>
-              <div className="flex items-center gap-1 text-xs text-slate-500">
-                <span>Table #{tableNumber || '??'}</span>
-              </div>
+              {isTableServiceEnabled && (
+                <div className="flex items-center gap-1 text-xs text-slate-500">
+                  <span>Table #{tableNumber || '??'}</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">

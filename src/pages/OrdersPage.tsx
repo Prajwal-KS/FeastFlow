@@ -19,6 +19,7 @@ interface Order {
   order_number: string;
   total_amount: number;
   status: string;
+  payment_status: string;
   created_at: string;
   order_items: OrderItem[];
 }
@@ -47,6 +48,7 @@ export default function OrdersPage() {
             order_number,
             total_amount,
             status,
+            payment_status,
             created_at,
             order_items (
               id,
@@ -186,7 +188,14 @@ export default function OrdersPage() {
                     <p className={clsx("text-xs font-bold uppercase tracking-wider", getStatusColor(order.status))}>
                       {getStatusText(order.status)}
                     </p>
-                    <p className="text-slate-900 text-lg font-bold leading-tight">Order {order.order_number || `#${order.id.substring(0, 4).toUpperCase()}`}</p>
+                    <p className="text-slate-900 text-lg font-bold leading-tight">
+                      {order.payment_status === 'pending' && order.order_number?.startsWith('T-')
+                        ? order.order_number
+                        : `Order ${order.order_number || `#${order.id.substring(0, 4).toUpperCase()}`}`}
+                    </p>
+                    {order.payment_status === 'pending' && order.order_number?.startsWith('T-') && (
+                      <p className="text-xs text-red-500 font-medium mt-0.5">Pay cash at counter to confirm</p>
+                    )}
                   </div>
                   <MoreVertical className="w-5 h-5 text-slate-400" />
                 </div>

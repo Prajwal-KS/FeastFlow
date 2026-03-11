@@ -22,13 +22,17 @@ interface Order {
   table_number: string;
   total_amount: number;
   status: string;
+  payment_status: string;
   created_at: string;
   order_items: OrderItem[];
 }
 
+import { useSettings } from '../context/SettingsContext';
+
 export default function OrderTrackingPage() {
   const { id } = useParams<{ id: string }>();
   const { user, loading } = useAuth();
+  const { isTableServiceEnabled } = useSettings();
   const navigate = useNavigate();
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,6 +55,7 @@ export default function OrderTrackingPage() {
             table_number,
             total_amount,
             status,
+            payment_status,
             created_at,
             order_items (
               id,
@@ -142,8 +147,14 @@ export default function OrderTrackingPage() {
         <div className="m-4 p-6 bg-white rounded-xl shadow-sm border border-primary/5">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <h2 className="text-2xl font-bold tracking-tight">Order {order.order_number || `#${order.id.substring(0, 4).toUpperCase()}`}</h2>
-              <p className="text-primary font-medium">Table {order.table_number || 'N/A'}</p>
+              <h2 className="text-2xl font-bold tracking-tight">
+                {order.payment_status === 'pending' && order.order_number?.startsWith('T-')
+                  ? order.order_number
+                  : `Order ${order.order_number || `#${order.id.substring(0, 4).toUpperCase()}`}`}
+              </h2>
+              {isTableServiceEnabled && (
+                <p className="text-primary font-medium">Table {order.table_number || 'N/A'}</p>
+              )}
             </div>
             <div className={clsx(
               "px-3 py-1 rounded-full",
@@ -163,7 +174,11 @@ export default function OrderTrackingPage() {
               <Clock className="w-5 h-5 text-primary" />
               <div>
                 <p className="text-xs text-slate-500">Estimated Waiting Time</p>
-                <p className="text-sm font-semibold">10-15 minutes</p>
+                <p className="text-sm font-semibold">
+                  {order.payment_status === 'pending' && order.order_number?.startsWith('T-')
+                    ? "Awaiting Confirmation" 
+                    : "10-15 minutes"}
+                </p>
               </div>
             </div>
           )}
@@ -194,7 +209,11 @@ export default function OrderTrackingPage() {
                     "font-bold",
                     ['pending', 'preparing', 'served', 'completed'].includes(order.status) ? "text-slate-900" : "text-slate-400"
                   )}>Order Received</h4>
-                  <p className="text-sm text-slate-500">Your order has been confirmed and sent to the kitchen.</p>
+                  <p className="text-sm text-slate-500">
+                    {order.payment_status === 'pending' && order.order_number?.startsWith('T-')
+                      ? "Your order has been placed. Please pay cash at the counter to confirm."
+                      : "Your order has been confirmed and sent to the kitchen."}
+                  </p>
                   <span className="text-[10px] font-medium text-slate-400 mt-1 block">{formatTime(order.created_at)}</span>
                 </div>
               </div>
