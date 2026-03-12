@@ -1,17 +1,46 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
+import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
+
+// Initialize Supabase Client for backend
+const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Trust proxy if you are behind a load balancer (like Render)
+  app.set('trust proxy', 1);
+
   app.use(express.json());
 
+  // --- Rate Limiters ---
+  const orderLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 minute
+    max: 10, // Limit each IP to 10 requests per windowMs
+    message: { error: 'Too many order requests from this IP, please try again later.' }
+  });
+
+  const otpRequestLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 5, // Limit each IP to 5 OTP requests per 10 minutes
+    message: { error: 'Too many OTP requests from this IP, please try again after 10 minutes.' }
+  });
+
+  const otpVerifyLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 10, // Limit each IP to 10 verification attempts per 10 minutes
+    message: { error: 'Too many verification attempts, please try again later.' }
+  });
+
   // Cashfree Create Order API
-  app.post('/api/create-order', async (req, res) => {
+  app.post('/api/create-order', orderLimiter, async (req, res) => {
     try {
       const { orderAmount, customerId, customerPhone, orderId } = req.body;
       
@@ -64,27 +93,25 @@ async function startServer() {
     }
   });
 
-  // In-memory OTP store (use Redis/DB for production scale)
-  const otpStore = new Map<string, Array<{ otp: string, expiresAt: number }>>();
-
   // Fast2SMS Send OTP API
-  app.post('/api/send-otp', async (req, res) => {
+  app.post('/api/send-otp', otpRequestLimiter, async (req, res) => {
     try {
       const { phone } = req.body;
       const apiKey = process.env.FAST2SMS_API_KEY;
 
       // Generate a random 6-digit OTP on the backend
       const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 600000).toISOString(); // 10 minutes from now
       
-      // Store OTP with 10 minute expiration (600000 ms)
-      // Keep existing valid OTPs so any OTP generated within the window works
-      const existingOtps = otpStore.get(phone) || [];
-      const validOtps = existingOtps.filter(o => o.expiresAt > Date.now());
-      validOtps.push({
-        otp: generatedOtp,
-        expiresAt: Date.now() + 600000
-      });
-      otpStore.set(phone, validOtps);
+      // Store OTP in Supabase
+      const { error: dbError } = await supabase
+        .from('otp_verifications')
+        .insert([{ phone, otp: generatedOtp, expires_at: expiresAt }]);
+
+      if (dbError) {
+        console.error('Error saving OTP to Supabase:', dbError);
+        return res.status(500).json({ error: 'Failed to generate OTP. Please ensure the otp_verifications table exists.' });
+      }
 
       if (!apiKey) {
         console.warn('Fast2SMS API key is missing. Check your environment variables.');
@@ -151,16 +178,26 @@ async function startServer() {
   });
 
   // Verify OTP API
-  app.post('/api/verify-otp', async (req, res) => {
+  app.post('/api/verify-otp', otpVerifyLimiter, async (req, res) => {
     try {
       const { phone, otp } = req.body;
-      const existingOtps = otpStore.get(phone) || [];
       
-      // Filter out expired OTPs
-      const validOtps = existingOtps.filter(o => o.expiresAt > Date.now());
+      // Fetch valid OTPs for this phone from Supabase
+      const { data: validOtps, error: fetchError } = await supabase
+        .from('otp_verifications')
+        .select('*')
+        .eq('phone', phone)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false });
 
-      if (validOtps.length === 0) {
-        otpStore.delete(phone);
+      if (fetchError) {
+        console.error('Error fetching OTPs:', fetchError);
+        return res.status(500).json({ error: 'Database error verifying OTP' });
+      }
+
+      if (!validOtps || validOtps.length === 0) {
+        // Clean up expired OTPs for this phone
+        await supabase.from('otp_verifications').delete().eq('phone', phone).lte('expires_at', new Date().toISOString());
         return res.status(400).json({ error: 'OTP expired or not found. Please request a new one.' });
       }
 
@@ -168,13 +205,12 @@ async function startServer() {
       const matchedOtp = validOtps.find(o => o.otp === otp);
 
       if (!matchedOtp) {
-        // Update store to only keep valid ones
-        otpStore.set(phone, validOtps);
         return res.status(400).json({ error: 'Invalid OTP' });
       }
 
       // OTP is valid, remove all OTPs for this phone so they can't be reused
-      otpStore.delete(phone);
+      await supabase.from('otp_verifications').delete().eq('phone', phone);
+      
       res.json({ success: true });
     } catch (error: any) {
       console.error('Server error verifying OTP:', error);

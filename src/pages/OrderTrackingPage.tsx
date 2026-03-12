@@ -24,6 +24,7 @@ interface Order {
   status: string;
   payment_status: string;
   created_at: string;
+  order_type?: 'dine-in' | 'takeaway';
   order_items: OrderItem[];
 }
 
@@ -57,6 +58,7 @@ export default function OrderTrackingPage() {
             status,
             payment_status,
             created_at,
+            order_type,
             order_items (
               id,
               quantity,
@@ -152,9 +154,11 @@ export default function OrderTrackingPage() {
                   ? order.order_number
                   : `Order ${order.order_number || `#${order.id.substring(0, 4).toUpperCase()}`}`}
               </h2>
-              {isTableServiceEnabled && (
+              {order.order_type === 'takeaway' ? (
+                <p className="text-primary font-medium">Takeaway</p>
+              ) : isTableServiceEnabled ? (
                 <p className="text-primary font-medium">Table {order.table_number || 'N/A'}</p>
-              )}
+              ) : null}
             </div>
             <div className={clsx(
               "px-3 py-1 rounded-full",

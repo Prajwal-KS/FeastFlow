@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { ArrowLeft, CheckCircle2, Circle, CreditCard, Banknote, Receipt } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Circle, CreditCard, Banknote, Receipt, Plus, Minus } from 'lucide-react';
 import { clsx } from 'clsx';
 import { load } from '@cashfreepayments/cashfree-js';
 import { supabase } from '../lib/supabase';
@@ -10,19 +10,20 @@ import { supabase } from '../lib/supabase';
 import { useSettings } from '../context/SettingsContext';
 
 export default function CheckoutPage() {
-  const { cart, cartTotal, tableNumber, clearCart } = useCart();
+  const { cart, cartTotal, tableNumber, clearCart, updateQuantity } = useCart();
   const { user, loading } = useAuth();
-  const { isTableServiceEnabled } = useSettings();
+  const { isTableServiceEnabled, packagingCharge } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'cash'>('upi');
+  const [orderType, setOrderType] = useState<'dine-in' | 'takeaway'>('dine-in');
   const [isPlaced, setIsPlaced] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const [tempOrderNumber, setTempOrderNumber] = useState<string | null>(null);
 
   // Tax is already included in the price
-  const toPay = cartTotal;
+  const toPay = cartTotal + (orderType === 'takeaway' ? packagingCharge : 0);
 
   useEffect(() => {
     // Check if returning from Cashfree payment redirect
@@ -118,7 +119,9 @@ export default function CheckoutPage() {
           total_amount: toPay,
           status: paymentStatus === 'paid' ? 'preparing' : 'pending',
           payment_method: paymentMethod,
-          payment_status: paymentStatus
+          payment_status: paymentStatus,
+          order_type: orderType,
+          packaging_charge: orderType === 'takeaway' ? packagingCharge : 0
         }])
         .select()
         .single();
@@ -250,8 +253,8 @@ export default function CheckoutPage() {
         <h1 className="text-3xl font-bold text-slate-900 mb-2">Order Placed!</h1>
         <p className="text-slate-500 mb-8">
           {paymentMethod === 'cash' 
-            ? `Please pay cash at the counter and show ${tempOrderNumber} to confirm your order${isTableServiceEnabled ? ` for Table ${tableNumber}` : ''}.`
-            : `Your food is being prepared.${isTableServiceEnabled ? ` It will be served at Table ${tableNumber}.` : ' Please collect it from the counter when ready.'}`}
+            ? `Please pay cash at the counter and show ${tempOrderNumber} to confirm your order${orderType === 'takeaway' ? ' for Takeaway' : (isTableServiceEnabled ? ` for Table ${tableNumber}` : '')}.`
+            : `Your food is being prepared.${orderType === 'takeaway' ? ' Please collect it from the counter when ready.' : (isTableServiceEnabled ? ` It will be served at Table ${tableNumber}.` : ' Please collect it from the counter when ready.')}`}
         </p>
         <p className="text-sm text-primary font-medium animate-pulse">Redirecting to your orders...</p>
       </div>
@@ -291,117 +294,149 @@ export default function CheckoutPage() {
         </div>
       </header>
 
-      <main className="px-4 py-6 max-w-md mx-auto space-y-6">
+      <main className="max-w-2xl mx-auto pb-32">
+        {/* Service Type Selection */}
+        <section className="p-4">
+          <div className="flex bg-primary/5 p-1 rounded-xl border border-primary/10">
+            <button 
+              onClick={() => setOrderType('dine-in')}
+              className={clsx(
+                "flex-1 py-2 px-4 rounded-lg font-bold text-sm transition-all",
+                orderType === 'dine-in' 
+                  ? "bg-primary text-slate-900 shadow-sm" 
+                  : "text-slate-500 font-medium hover:bg-primary/5"
+              )}
+            >
+              Dine-in
+            </button>
+            <button 
+              onClick={() => setOrderType('takeaway')}
+              className={clsx(
+                "flex-1 py-2 px-4 rounded-lg font-bold text-sm transition-all",
+                orderType === 'takeaway' 
+                  ? "bg-primary text-slate-900 shadow-sm" 
+                  : "text-slate-500 font-medium hover:bg-primary/5"
+              )}
+            >
+              Takeaway
+            </button>
+          </div>
+        </section>
+
         {/* Order Summary */}
-        <section className="bg-white rounded-2xl p-5 shadow-sm border border-primary/10">
-          <h2 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-900">
-            <Receipt className="w-5 h-5 text-primary" />
-            Order Summary
-          </h2>
+        <section className="p-4 border-b border-primary/5">
+          <h2 className="text-lg font-bold mb-4 text-slate-900">Order Summary</h2>
           <div className="space-y-4">
             {cart.map((item) => (
-              <div key={item.id} className="flex justify-between items-start">
-                <div className="flex gap-3">
-                  <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 border border-primary/10">
-                    <img className="w-full h-full object-cover" alt={item.name} src={item.imageUrl} />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-slate-900 leading-tight">{item.name}</h4>
-                    <p className="text-sm text-slate-500">Qty: {item.quantity}</p>
+              <div key={item.id} className="flex items-center gap-4">
+                <div 
+                  className="h-16 w-16 rounded-lg bg-cover bg-center shrink-0" 
+                  style={{ backgroundImage: `url('${item.imageUrl}')` }}
+                ></div>
+                <div className="flex-1">
+                  <div className="flex justify-between items-start">
+                    <p className="font-medium text-slate-900">{item.name}</p>
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="flex items-center gap-3 bg-white border border-primary/20 rounded-lg px-2 py-1">
+                        <button 
+                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          className="text-primary hover:bg-primary/10 rounded"
+                        >
+                          <Minus className="w-4 h-4" />
+                        </button>
+                        <span className="text-xs font-bold w-4 text-center">{item.quantity}</span>
+                        <button 
+                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          className="text-primary hover:bg-primary/10 rounded"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <p className="font-bold text-slate-900">₹{item.price * item.quantity}</p>
+                    </div>
                   </div>
                 </div>
-                <span className="font-bold text-slate-900">₹{item.price * item.quantity}</span>
               </div>
             ))}
-          </div>
-          
-          <div className="mt-6 pt-4 border-t border-dashed border-slate-200 space-y-2">
-            <div className="flex justify-between text-slate-600">
-              <span>Subtotal</span>
-              <span className="font-medium">₹{cartTotal}</span>
-            </div>
-            <div className="flex justify-between text-slate-600">
-              <span>Taxes (5% GST included)</span>
-              <span className="font-medium text-green-600">Included</span>
-            </div>
-            <div className="flex justify-between text-lg font-bold text-slate-900 pt-2 border-t border-slate-100 mt-2">
-              <span>Total</span>
-              <span className="text-primary">₹{toPay.toFixed(2)}</span>
-            </div>
           </div>
         </section>
 
         {/* Payment Method */}
-        <section className="bg-white rounded-2xl p-5 shadow-sm border border-primary/10">
-          <h2 className="font-bold text-lg mb-4 text-slate-900">Payment Method</h2>
+        <section className="p-4">
+          <h2 className="text-lg font-bold mb-4 text-slate-900">Payment Methods</h2>
           <div className="space-y-3">
-            <button
-              onClick={() => setPaymentMethod('upi')}
-              className={clsx(
-                "w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all",
-                paymentMethod === 'upi' 
-                  ? "border-primary bg-primary/5" 
-                  : "border-slate-100 hover:border-primary/30"
-              )}
-            >
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Other Options</p>
+            
+            <label className="flex items-center justify-between p-4 rounded-xl bg-white border border-primary/10 cursor-pointer hover:border-primary/30 transition-colors">
               <div className="flex items-center gap-3">
-                <div className={clsx(
-                  "w-10 h-10 rounded-full flex items-center justify-center",
-                  paymentMethod === 'upi' ? "bg-primary/20 text-primary" : "bg-slate-100 text-slate-500"
-                )}>
-                  <CreditCard className="w-5 h-5" />
-                </div>
-                <span className="font-semibold text-slate-900">UPI (GPay / PhonePe)</span>
+                <CreditCard className="w-6 h-6 text-primary" />
+                <p className="font-medium text-slate-900">UPI (GPay / PhonePe)</p>
               </div>
-              {paymentMethod === 'upi' ? (
-                <CheckCircle2 className="w-6 h-6 text-primary" />
-              ) : (
-                <Circle className="w-6 h-6 text-slate-300" />
-              )}
-            </button>
+              <input 
+                type="radio" 
+                name="payment" 
+                className="text-primary focus:ring-primary h-5 w-5" 
+                checked={paymentMethod === 'upi'}
+                onChange={() => setPaymentMethod('upi')}
+              />
+            </label>
 
-            <button
-              onClick={() => setPaymentMethod('cash')}
-              className={clsx(
-                "w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all",
-                paymentMethod === 'cash' 
-                  ? "border-primary bg-primary/5" 
-                  : "border-slate-100 hover:border-primary/30"
-              )}
-            >
+            <label className="flex items-center justify-between p-4 rounded-xl bg-white border border-primary/10 cursor-pointer hover:border-primary/30 transition-colors">
               <div className="flex items-center gap-3">
-                <div className={clsx(
-                  "w-10 h-10 rounded-full flex items-center justify-center",
-                  paymentMethod === 'cash' ? "bg-primary/20 text-primary" : "bg-slate-100 text-slate-500"
-                )}>
-                  <Banknote className="w-5 h-5" />
-                </div>
-                <span className="font-semibold text-slate-900">Cash Payment</span>
+                <Banknote className="w-6 h-6 text-primary" />
+                <p className="font-medium text-slate-900">Cash</p>
               </div>
-              {paymentMethod === 'cash' ? (
-                <CheckCircle2 className="w-6 h-6 text-primary" />
-              ) : (
-                <Circle className="w-6 h-6 text-slate-300" />
-              )}
-            </button>
+              <input 
+                type="radio" 
+                name="payment" 
+                className="text-primary focus:ring-primary h-5 w-5" 
+                checked={paymentMethod === 'cash'}
+                onChange={() => setPaymentMethod('cash')}
+              />
+            </label>
+          </div>
+        </section>
+
+        {/* Bill Details */}
+        <section className="p-4 mt-2">
+          <div className="bg-primary/5 rounded-xl p-4 border border-primary/10">
+            <div className="flex justify-between mb-2">
+              <span className="text-slate-600">Item Total</span>
+              <span className="text-slate-900 font-medium">₹{cartTotal}</span>
+            </div>
+            <div className="flex justify-between mb-2">
+              <span className="text-slate-600">Taxes & Charges</span>
+              <span className="text-green-600 font-medium">Included</span>
+            </div>
+            {orderType === 'takeaway' && (
+              <div className="flex justify-between mb-2">
+                <span className="text-slate-600">Packaging Charge (Takeaway)</span>
+                <span className="text-slate-900 font-medium">₹{packagingCharge}</span>
+              </div>
+            )}
+            <div className="h-[1px] bg-primary/20 my-3"></div>
+            <div className="flex justify-between items-center font-bold text-lg text-slate-900">
+              <span>To Pay</span>
+              <span className="text-primary">₹{toPay.toFixed(2)}</span>
+            </div>
           </div>
         </section>
       </main>
 
-      {/* Fixed Bottom Action */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-100 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-40">
-        <div className="max-w-md mx-auto flex items-center gap-4">
-          <div className="flex-1">
-            <p className="text-sm text-slate-500 font-medium">Total to pay</p>
+      {/* Bottom Action Bar */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-primary/10 p-4 z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+        <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
+          <div className="hidden sm:block">
+            <p className="text-xs text-slate-500 uppercase font-bold">Total Amount</p>
             <p className="text-xl font-bold text-slate-900">₹{toPay.toFixed(2)}</p>
           </div>
           <button 
             onClick={handlePlaceOrder}
             disabled={isProcessing}
-            className="bg-primary hover:bg-primary/90 text-white px-8 py-3.5 rounded-xl font-bold text-lg shadow-lg shadow-primary/20 transition-all flex-[2] text-center disabled:opacity-70 flex justify-center items-center"
+            className="w-full sm:w-auto flex-1 sm:px-12 py-4 bg-primary text-slate-900 font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 transition-colors flex justify-center items-center disabled:opacity-70"
           >
             {isProcessing ? (
-              <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin" />
             ) : (
               'Place Order'
             )}

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { menuItems as localMenuItems, categories as localCategories, MenuItem } from '../data/menu';
+import { MenuItem } from '../data/menu';
 import { Menu, Search, ShoppingBasket, Plus, Minus, ArrowRight, X, User, ClipboardList, LogOut } from 'lucide-react';
 import { clsx } from 'clsx';
 import { supabase } from '../lib/supabase';
@@ -15,8 +15,8 @@ export default function MenuPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(localMenuItems);
-  const [categories, setCategories] = useState<string[]>(localCategories);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<string[]>(['All Items']);
   const [isLoadingMenu, setIsLoadingMenu] = useState(true);
 
   const { cart, addToCart, updateQuantity, cartTotal, cartCount, tableNumber } = useCart();
@@ -54,8 +54,7 @@ export default function MenuPage() {
           setCategories(['All Items', ...uniqueCategories]);
         }
       } catch (error) {
-        console.warn('Could not fetch menu from Supabase, falling back to local data. Ensure you have created the menu_items table.', error);
-        // Fallback is already set in initial state
+        console.error('Could not fetch menu from Supabase. Ensure you have created the menu_items table.', error);
       } finally {
         setIsLoadingMenu(false);
       }
