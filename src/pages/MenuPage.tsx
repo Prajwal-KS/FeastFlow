@@ -272,42 +272,46 @@ export default function MenuPage() {
       </div>
 
       <main>
-        {/* Hero */}
-        <div className="relative h-48 w-full overflow-hidden mb-6">
-          <img
-            className="w-full h-full object-cover"
-            alt="Gourmet Indian plating"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDJ4RufeyBruyU-hLkUbxtxE8dwxHAY_Enir62gbRJuY6tlANiyRz8Swdq0IoO5ivxvLY6uAs8klvwc2WGbQiztlWh8R5Rc1Ne2x8NsMdfcJEfkHkmhjBRO3u6kiGEFukD_Gg4KVzar3tfxE4GrJZVijjb-69J9lDtI3CZxCax0ttP_9DpkeiN2TYIiONz8eGzlGikWWWMNwg1Ym3SSwvJ_9JXpTyepvDdfKpSlMdluruDxnr1biQmERWcvQ4V2H56so5Iw8y72xEui"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-6">
-            <div>
-              <span className="bg-primary text-slate-900 px-2 py-1 rounded text-xs font-bold uppercase tracking-tighter mb-2 inline-block">
-                Chef's Special
-              </span>
-              <h2 className="text-2xl font-bold text-white">Traditional Flavors, Modern Twist</h2>
+        {!isSearchOpen && (
+          <>
+            {/* Hero */}
+            <div className="relative h-48 w-full overflow-hidden mb-6">
+              <img
+                className="w-full h-full object-cover"
+                alt="Gourmet Indian plating"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDJ4RufeyBruyU-hLkUbxtxE8dwxHAY_Enir62gbRJuY6tlANiyRz8Swdq0IoO5ivxvLY6uAs8klvwc2WGbQiztlWh8R5Rc1Ne2x8NsMdfcJEfkHkmhjBRO3u6kiGEFukD_Gg4KVzar3tfxE4GrJZVijjb-69J9lDtI3CZxCax0ttP_9DpkeiN2TYIiONz8eGzlGikWWWMNwg1Ym3SSwvJ_9JXpTyepvDdfKpSlMdluruDxnr1biQmERWcvQ4V2H56so5Iw8y72xEui"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-6">
+                <div>
+                  <span className="bg-primary text-slate-900 px-2 py-1 rounded text-xs font-bold uppercase tracking-tighter mb-2 inline-block">
+                    Chef's Special
+                  </span>
+                  <h2 className="text-2xl font-bold text-white">Traditional Flavors, Modern Twist</h2>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* Categories */}
-        <div className="px-4 mb-8">
-          <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={clsx(
-                  "whitespace-nowrap px-5 py-2 rounded-full font-semibold transition-colors",
-                  activeCategory === cat
-                    ? "bg-primary text-white shadow-lg shadow-primary/20"
-                    : "bg-white text-slate-700 hover:bg-primary/10 border border-primary/20"
-                )}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-        </div>
+            {/* Categories */}
+            <div className="px-4 mb-8">
+              <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveCategory(cat)}
+                    className={clsx(
+                      "whitespace-nowrap px-5 py-2 rounded-full font-semibold transition-colors",
+                      activeCategory === cat
+                        ? "bg-primary text-white shadow-lg shadow-primary/20"
+                        : "bg-white text-slate-700 hover:bg-primary/10 border border-primary/20"
+                    )}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Menu Grid */}
         <section className="px-4 space-y-8">
