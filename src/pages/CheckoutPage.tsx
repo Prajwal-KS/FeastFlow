@@ -101,13 +101,16 @@ export default function CheckoutPage() {
     }
   };
 
-  const generateTempOrderNumber = () => {
-    return `T-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-  };
-
   const saveOrderToDatabase = async (paymentStatus: string) => {
     try {
-      const orderNumber = paymentStatus === 'paid' ? await generateOrderNumber() : generateTempOrderNumber();
+      // Generate a sequential order number for paid orders
+      // For pending cash orders, generate a temporary order number
+      let orderNumber;
+      if (paymentStatus === 'pending') {
+        orderNumber = `T-${Math.floor(Math.random() * 9000 + 1000)}`;
+      } else {
+        orderNumber = await generateOrderNumber();
+      }
 
       // 1. Create the order
       const { data: order, error: orderError } = await supabase

@@ -114,12 +114,15 @@ export default function OrdersPage() {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'completed':
-      case 'served':
         return 'Completed';
+      case 'served':
+        return 'Served';
       case 'cancelled':
         return 'Cancelled';
       case 'preparing':
         return 'Preparing';
+      case 'ready':
+        return 'Ready';
       default:
         return 'In Progress';
     }
@@ -189,11 +192,9 @@ export default function OrdersPage() {
                       {getStatusText(order.status)}
                     </p>
                     <p className="text-slate-900 text-lg font-bold leading-tight">
-                      {order.payment_status === 'pending' && order.order_number?.startsWith('T-')
-                        ? order.order_number
-                        : `Order ${order.order_number || `#${order.id.substring(0, 4).toUpperCase()}`}`}
+                      {`Order ${order.order_number || `#${order.id.substring(0, 4).toUpperCase()}`}`}
                     </p>
-                    {order.payment_status === 'pending' && order.order_number?.startsWith('T-') && (
+                    {order.payment_status === 'pending' && (
                       <p className="text-xs text-red-500 font-medium mt-0.5">Pay cash at counter to confirm</p>
                     )}
                   </div>

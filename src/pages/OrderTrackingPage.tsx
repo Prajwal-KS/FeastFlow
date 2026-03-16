@@ -111,12 +111,15 @@ export default function OrderTrackingPage() {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'completed':
-      case 'served':
         return 'COMPLETED';
+      case 'served':
+        return 'SERVED';
       case 'cancelled':
         return 'CANCELLED';
       case 'preparing':
         return 'PREPARING';
+      case 'ready':
+        return 'READY';
       default:
         return 'IN PROGRESS';
     }
@@ -150,9 +153,7 @@ export default function OrderTrackingPage() {
           <div className="flex justify-between items-start mb-4">
             <div>
               <h2 className="text-2xl font-bold tracking-tight">
-                {order.payment_status === 'pending' && order.order_number?.startsWith('T-')
-                  ? order.order_number
-                  : `Order ${order.order_number || `#${order.id.substring(0, 4).toUpperCase()}`}`}
+                {`Order ${order.order_number || `#${order.id.substring(0, 4).toUpperCase()}`}`}
               </h2>
               {order.order_type === 'takeaway' ? (
                 <p className="text-primary font-medium">Takeaway</p>
@@ -179,7 +180,7 @@ export default function OrderTrackingPage() {
               <div>
                 <p className="text-xs text-slate-500">Estimated Waiting Time</p>
                 <p className="text-sm font-semibold">
-                  {order.payment_status === 'pending' && order.order_number?.startsWith('T-')
+                  {order.payment_status === 'pending'
                     ? "Awaiting Confirmation" 
                     : "10-15 minutes"}
                 </p>
@@ -214,7 +215,7 @@ export default function OrderTrackingPage() {
                     ['pending', 'preparing', 'served', 'completed'].includes(order.status) ? "text-slate-900" : "text-slate-400"
                   )}>Order Received</h4>
                   <p className="text-sm text-slate-500">
-                    {order.payment_status === 'pending' && order.order_number?.startsWith('T-')
+                    {order.payment_status === 'pending'
                       ? "Your order has been placed. Please pay cash at the counter to confirm."
                       : "Your order has been confirmed and sent to the kitchen."}
                   </p>

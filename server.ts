@@ -124,19 +124,21 @@ async function startServer() {
       // Fast2SMS expects a 10-digit number without country code
       const cleanPhone = phone.replace(/\D/g, '').slice(-10);
 
-      const response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
-        method: 'POST',
+      const message = `Welcome! Your verification code is ${generatedOtp}. Please do not share this OTP with anyone.`;
+      const url = new URL('https://www.fast2sms.com/dev/bulkV2');
+      url.searchParams.append('authorization', apiKey);
+      url.searchParams.append('route', 'q');
+      url.searchParams.append('message', message);
+      url.searchParams.append('flash', '0');
+      url.searchParams.append('numbers', cleanPhone);
+      url.searchParams.append('schedule_time', '');
+
+      const response = await fetch(url.toString(), {
+        method: 'GET',
         headers: {
-          'authorization': apiKey,
-          'Content-Type': 'application/json',
           'Accept': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        },
-        body: JSON.stringify({
-          route: 'otp',
-          variables_values: generatedOtp,
-          numbers: cleanPhone,
-        })
+        }
       });
 
       const responseText = await response.text();
